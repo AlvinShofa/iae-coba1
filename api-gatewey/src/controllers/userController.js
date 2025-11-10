@@ -10,9 +10,9 @@ exports.register = (req, res) => {
 };
 
 exports.login = (req, res) => {
-  const { email, password } = req.body;
+  const { username, password } = req.body;
 
-  userClient.Login({ email, password }, (err, response) => {
+  userClient.Login({ username, password }, (err, response) => {
     if (err) return res.status(401).json({ message: err.message });
     res.json(response);
   });

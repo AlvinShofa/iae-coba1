@@ -67,8 +67,8 @@ const EventDetail = () => {
       return;
     }
 
-    const userId = localStorage.getItem("username");
-    if (!userId) {
+    const username = localStorage.getItem("username");
+    if (!username) {
       alert("Please login first");
       navigate("/SignIn");
       return;
@@ -84,37 +84,48 @@ const EventDetail = () => {
 
       const totalPrice = calculateTotal();
 
-      // Step 1: Process Payment
-      const paymentResponse = await processPayment({
-        user_id: userId,
-        event_id: id,
-        amount: totalPrice,
-        method: "credit_card" // Could be dynamic
-      });
-
-      if (!paymentResponse.success) {
-        alert("Payment failed: " + paymentResponse.message);
-        return;
-      }
-
-      // Step 2: Create Ticket
+      // Step 1: Create Ticket First
+      console.log('Creating ticket...');
       const ticketResponse = await purchaseTicket({
         eventId: id,
-        userId: userId,
+        userId: username,
         quantity: quantity,
         totalPrice: totalPrice
       });
 
-      if (ticketResponse.success) {
-        alert(`Ticket purchased successfully! Code: ${ticketResponse.ticket.ticketCode}`);
-        navigate("/MyTickets");
-      } else {
-        alert("Ticket purchase failed: " + ticketResponse.message);
+      if (!ticketResponse.success) {
+        alert("Ticket creation failed: " + ticketResponse.message);
+        setProcessing(false);
+        return;
       }
+
+      console.log('Ticket created:', ticketResponse.ticket);
+
+      // Step 2: Process Payment
+      console.log('Processing payment...');
+      const paymentResponse = await processPayment({
+        user_id: username,
+        event_id: id,
+        amount: totalPrice,
+        method: "credit_card",
+        ticket_id: ticketResponse.ticket.id
+      });
+
+      if (!paymentResponse.success) {
+        alert("Payment failed: " + paymentResponse.message);
+        setProcessing(false);
+        return;
+      }
+
+      console.log('Payment successful:', paymentResponse);
+
+      // Success!
+      alert(`🎉 Ticket purchased successfully!\n\nTicket Code: ${ticketResponse.ticket.ticketCode}\nTransaction ID: ${paymentResponse.transaction_id}\n\nPlease check your tickets in "My Tickets" page.`);
+      navigate("/MyTickets");
 
     } catch (err) {
       console.error("Purchase error:", err);
-      alert("An error occurred during purchase. Please try again.");
+      alert("An error occurred during purchase: " + (err.response?.data?.message || err.message || "Unknown error"));
     } finally {
       setProcessing(false);
     }
@@ -127,6 +138,7 @@ const EventDetail = () => {
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Loading...</span>
           </div>
+          <p className="mt-2">Loading event details...</p>
         </div>
       </div>
     );
@@ -148,23 +160,25 @@ const EventDetail = () => {
         {/* Left Side - Event Info */}
         <div className="col-md-6">
           <img
-            src={event.imageUrl || "event1.jpg"}
+            src={`/${event.imageUrl || "event1.jpg"}`}
             alt={event.title}
             className="img-fluid rounded mb-4 shadow-sm"
+            style={{ maxHeight: '400px', width: '100%', objectFit: 'cover' }}
             onError={(e) => {
-              e.target.src = 'event1.jpg';
+              e.target.src = '/event1.jpg';
             }}
           />
           <h4 className="fw-bold">{event.title}</h4>
-          <p className="fw-semibold mt-2 mb-1">Date: {event.date}</p>
-          <p className="fw-semibold mb-1">Time: {event.time}</p>
-          <p className="fw-semibold mb-1">Location: {event.location}</p>
+          <span className="badge bg-secondary mb-3">{event.category}</span>
+          <p className="fw-semibold mt-2 mb-1">📅 Date: {event.date}</p>
+          <p className="fw-semibold mb-1">🕐 Time: {event.time}</p>
+          <p className="fw-semibold mb-3">📍 Location: {event.location}</p>
           <p className="text-secondary">{event.description}</p>
           <p className="fw-bold">
-            Available Tickets: {event.availableTickets} / {event.capacity}
+            🎫 Available Tickets: <span className="text-success">{event.availableTickets}</span> / {event.capacity}
           </p>
-          <p className="fw-bold text-primary">
-            Price: Rp {event.price.toLocaleString('id-ID')}
+          <p className="fw-bold text-primary fs-5">
+            💰 Price: Rp {event.price.toLocaleString('id-ID')}
           </p>
         </div>
 
@@ -245,17 +259,34 @@ const EventDetail = () => {
               <input
                 type="number"
                 min="1"
-                max={event.availableTickets}
+                max={Math.min(event.availableTickets, 10)}
                 className="form-control"
                 value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value))}
+                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
                 required
               />
+              <small className="text-muted">Maximum 10 tickets per transaction</small>
             </div>
 
             {selectedTicket && (
               <div className="alert alert-info">
-                <strong>Total:</strong> Rp {calculateTotal().toLocaleString('id-ID')}
+                <div className="d-flex justify-content-between mb-1">
+                  <span>Ticket Type:</span>
+                  <strong>{selectedTicket.toUpperCase()}</strong>
+                </div>
+                <div className="d-flex justify-content-between mb-1">
+                  <span>Quantity:</span>
+                  <strong>{quantity}x</strong>
+                </div>
+                <div className="d-flex justify-content-between mb-1">
+                  <span>Price per ticket:</span>
+                  <strong>Rp {(selectedTicket === "vip" ? event.price * 1.5 : event.price).toLocaleString('id-ID')}</strong>
+                </div>
+                <hr />
+                <div className="d-flex justify-content-between">
+                  <strong>Total:</strong> 
+                  <strong className="text-primary fs-5">Rp {calculateTotal().toLocaleString('id-ID')}</strong>
+                </div>
               </div>
             )}
 
@@ -265,13 +296,22 @@ const EventDetail = () => {
               disabled={!selectedTicket || processing || event.availableTickets === 0}
             >
               {processing 
-                ? "Processing..." 
+                ? "Processing Purchase..." 
                 : event.availableTickets === 0 
                   ? "Sold Out"
                   : selectedTicket 
                     ? `Buy ${selectedTicket.toUpperCase()} Ticket` 
                     : "Choose Ticket Type"}
             </button>
+
+            {processing && (
+              <div className="text-center mt-3">
+                <div className="spinner-border spinner-border-sm text-primary me-2" role="status">
+                  <span className="visually-hidden">Loading...</span>
+                </div>
+                <span className="text-muted">Please wait, processing your purchase...</span>
+              </div>
+            )}
           </form>
         </div>
       </div>

@@ -26,6 +26,7 @@ const loadProto = (filename) => {
 const userProto = loadProto('user.proto');
 const eventProto = loadProto('event.proto');
 const paymentProto = loadProto('payment.proto');
+const notificationProto = loadProto('notification.proto');
 
 // Create gRPC clients
 export const userClient = new userProto.user.UserService(
@@ -43,4 +44,13 @@ export const paymentClient = new paymentProto.payment.PaymentService(
   grpc.credentials.createInsecure()
 );
 
+export const notificationClient = new notificationProto.notification.NotificationService(
+  `${process.env.NOTIFICATION_SERVICE_HOST}:${process.env.NOTIFICATION_SERVICE_PORT}`,
+  grpc.credentials.createInsecure()
+);
+
 console.log('✅ gRPC Clients initialized successfully');
+console.log(`   - User Service: ${process.env.USER_SERVICE_HOST}:${process.env.USER_SERVICE_PORT}`);
+console.log(`   - Event Service: ${process.env.EVENT_SERVICE_HOST}:${process.env.EVENT_SERVICE_PORT}`);
+console.log(`   - Payment Service: ${process.env.PAYMENT_SERVICE_HOST}:${process.env.PAYMENT_SERVICE_PORT}`);
+console.log(`   - Notification Service: ${process.env.NOTIFICATION_SERVICE_HOST}:${process.env.NOTIFICATION_SERVICE_PORT}`);
